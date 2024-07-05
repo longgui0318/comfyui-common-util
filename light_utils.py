@@ -13,8 +13,9 @@ class EnhancedRandomLightSourceGenerator:
 
     def generate_light_source(self, base_image, seed=None):
         if seed is not None:
+            valid_seed = seed % (2**32)
             random.seed(seed)
-            np.random.seed(seed)
+            np.random.seed(valid_seed)
 
         base_brightness = self._get_base_brightness(base_image)
         
