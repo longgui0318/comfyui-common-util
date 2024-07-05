@@ -156,13 +156,13 @@ class LayerImagesIPAdapterAdvanced:
             else:
                 remain.append(layer)
         if len(layer_filter_data) == 0:
-            extendedMASK = torch.zeros_like(layer_canvas)
-            extendedMASK = extendedMASK.to(layer_canvas.device,dtype=layer_canvas.dtype)
-            return (model,remain,extendedMASK,)
+            extended_mask = torch.zeros_like(layer_canvas)
+            extended_mask = extended_mask.to(layer_canvas.device,dtype=layer_canvas.dtype)
+            return (model,remain,extended_mask,)
         
         need_process_images = []
         if layer_need_fuse:
-            extendedMASK = None
+            extended_mask = None
             fuse_img = None
             for layer in layer_filter_data:
                 if fuse_img == None:
@@ -172,7 +172,7 @@ class LayerImagesIPAdapterAdvanced:
             if fuse_img is not None:
                 layer_img,layer_mask = pilimage_to_tensor(fuse_img, needMask=True)
                 need_process_images.append((layer_img,layer_mask))
-                extendedMASK = layer_mask
+                extended_mask = layer_mask
         else:
             fuse_img = None
             for layer in layer_filter_data:
@@ -185,21 +185,21 @@ class LayerImagesIPAdapterAdvanced:
                 _,layer_mask = pilimage_to_tensor(img_pil, needMask=True,justMask=True)
                 need_process_images.append((layer_img,layer_mask))
             if fuse_img is not None:
-                _,extendedMASK = pilimage_to_tensor(fuse_img, needMask=True,justMask=True)
-        if extendedMASK is None:
-            extendedMASK = torch.zeros_like(layer_canvas)
-            extendedMASK = extendedMASK.to(layer_canvas.device,dtype=layer_canvas.dtype)
+                _,extended_mask = pilimage_to_tensor(fuse_img, needMask=True,justMask=True)
+        if extended_mask is None:
+            extended_mask = torch.zeros_like(layer_canvas)
+            extended_mask = extended_mask.to(layer_canvas.device,dtype=layer_canvas.dtype)
         if len(need_process_images) == 0:
-            return (model,remain,extendedMASK,)        
+            return (model,remain,extended_mask,)        
         try:
             from custom_nodes.ComfyUI_IPAdapter_plus.IPAdapterPlus import IPAdapterAdvanced
         except:
             raise Exception("ComfyUI_IPAdapter_plus.IPAdapterPlus not found,you should install it first.")
-        ipadapter = IPAdapterAdvanced()
+        ipadapterObj = IPAdapterAdvanced()
         
         for layer in need_process_images:
-            model ,_ = ipadapter.apply_ipadapter(model, ipadapter, start_at, end_at, weight, weight_style, weight_composition, expand_style, weight_type, combine_embeds, weight_faceidv2, layer_img, image_style, image_composition, image_negative, clip_vision, layer_mask, insightface, embeds_scaling, layer_weights, ipadapter_params, encode_batch_size, style_boost)
-        return (model,remain,extendedMASK,)
+            model ,_ = ipadapterObj.apply_ipadapter(model, ipadapter, start_at, end_at, weight, weight_style, weight_composition, expand_style, weight_type, combine_embeds, weight_faceidv2, layer_img, image_style, image_composition, image_negative, clip_vision, layer_mask, insightface, embeds_scaling, layer_weights, ipadapter_params, encode_batch_size, style_boost)
+        return (model,remain,extended_mask,)
 
 
 NODE_CLASS_MAPPINGS = {
