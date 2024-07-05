@@ -54,10 +54,7 @@ def pilimage_to_tensor(image):
         raise ValueError("`image` must be a PIL Image object.")
     
     # 转换为RGB并转为numpy数组
-    image_array = np.array(image)
-    
-    # # 改变维度顺序：(H, W, C) -> (C, H, W)
-    # image_array = image_array.transpose(2, 0, 1)
+    image_array = np.array(image.convert("RGB"))
     
     # 转换为torch tensor，归一化到[0, 1]范围
     image_tensor = torch.from_numpy(image_array).float().div(255)
