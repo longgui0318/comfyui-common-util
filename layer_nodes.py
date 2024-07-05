@@ -171,6 +171,8 @@ class LayerImagesIPAdapterAdvanced:
                     fuse_img = Image.alpha_composite(fuse_img, layer['deformationImage'])
             if fuse_img is not None:
                 layer_img,layer_mask = pilimage_to_tensor(fuse_img, needMask=True)
+                #取反 0 1 互换
+                layer_mask = 1. - layer_mask
                 need_process_images.append((layer_img,layer_mask))
                 extended_mask = layer_mask
         else:
@@ -183,9 +185,11 @@ class LayerImagesIPAdapterAdvanced:
                     fuse_img = Image.alpha_composite(fuse_img, img_pil)
                 layer_img,_ = pilimage_to_tensor(layer["originalImage"])
                 _,layer_mask = pilimage_to_tensor(img_pil, needMask=True,justMask=True)
+                layer_mask = 1. - layer_mask
                 need_process_images.append((layer_img,layer_mask))
             if fuse_img is not None:
                 _,extended_mask = pilimage_to_tensor(fuse_img, needMask=True,justMask=True)
+                extended_mask = 1. - extended_mask
         if extended_mask is None:
             extended_mask = torch.zeros_like(layer_canvas)
             extended_mask = extended_mask.to(layer_canvas.device,dtype=layer_canvas.dtype)
