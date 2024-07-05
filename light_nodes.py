@@ -1,8 +1,5 @@
-import os
-import json
-import folder_paths
 from .light_utils import EnhancedRandomLightSourceGenerator
-from .layer_utils import open_image_from_inputdir, pilimage_to_tensor,tensor_to_pilimage
+from .layer_utils import pilimage_to_tensor, tensor_to_pilimage
 
 
 class EnhancedRandomLightSource:
@@ -20,11 +17,12 @@ class EnhancedRandomLightSource:
 
     CATEGORY = "utils"
 
-    def generate_fc(self,image, seed):
+    def generate_fc(self, image, seed):
         image = tensor_to_pilimage(image)
-        generator = EnhancedRandomLightSourceGenerator(image.size[0], image.size[1])
+        generator = EnhancedRandomLightSourceGenerator(
+            image.size[0], image.size[1])
         light_source = generator.generate_light_source(image, seed)
-        light_source = pilimage_to_tensor(light_source)
+        light_source, _ = pilimage_to_tensor(light_source)
         return (light_source,)
 
 

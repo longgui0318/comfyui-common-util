@@ -1,8 +1,9 @@
 import os
 import json
+import torch
 import folder_paths
-from .layer_utils import fuse_layer,pilimage_to_tensor,open_image_from_inputdir
-
+from .layer_utils import fuse_layer,pilimage_to_tensor
+from PIL import Image
 
 class InitLayerInfoArray:
     @classmethod
@@ -84,22 +85,7 @@ class AddedLayerInfoToArray:
         layerInfoArray = json.loads(json.dumps(layerInfoArray))
         
         layerInfoArray["layers"].append(layer)
-        return (layerInfoArray, json.dumps(layerInfoArray),)
-    
-    
-class LayerInfoArrayFilter:
-    @classmethod
-    def INPUT_TYPES(s):
-        return {}
-    RETURN_TYPES = ("STRING",)
-    RETURN_NAMES = ("STRING",)
-    FUNCTION = "load_unet"
-
-    CATEGORY = "x"
-
-    def load_unet(self,):
-        return ("unet",)
-    
+        return (layerInfoArray, json.dumps(layerInfoArray),)    
     
 class LayerInfoArrayFuse:
     @classmethod
@@ -109,8 +95,8 @@ class LayerInfoArrayFuse:
                 "layerInfoArrayJson":("STRING",{"default": ""}),
             }
         }
-    RETURN_TYPES = ("IMAGE","MASK","IMAGE","MASK","STRING","IMAGE","BOOLEAN","INT","INT","INT")
-    RETURN_NAMES = ("fuseImage","fuseMask","fuseProductImage","fuseProductMask","prompt","referenceBg","correctColor","renderStrength","colorStrength","outlineStrength")
+    RETURN_TYPES = ("IMAGE","MASK","IMAGE","MASK","IMAGE","LAYER_IMAGES","STRING","BOOLEAN","INT","INT","INT")
+    RETURN_NAMES = ("fuseImage","fuseMask","fuseProductImage","fuseProductMask","referenceBGImage","layerImages","prompt","correctColor","renderStrength","colorStrength","outlineStrength")
     FUNCTION = "fuse_fc"
 
     CATEGORY = "utils"
@@ -118,47 +104,115 @@ class LayerInfoArrayFuse:
     def fuse_fc(self, layerInfoArrayJson,):
         layerInfoArray = json.loads(layerInfoArrayJson)
 
-        fuse_image, fuse_product_image = fuse_layer(layerInfoArray)
-        fuse_image, fuse_mask = pilimage_to_tensor(fuse_image, mask=True)
-        fuse_product_image, fuse_product_mask = pilimage_to_tensor(
-            fuse_product_image, mask=True)
-        if layerInfoArray["reference_bg"] is not None and layerInfoArray["reference_bg"] != "":
-            reference_bg_image = open_image_from_inputdir(
-                layerInfoArray["reference_bg"])
-            reference_bg_image = pilimage_to_tensor(reference_bg_image)
-        else:
-            reference_bg_image = None
-        return (fuse_image,fuse_mask, fuse_product_image,fuse_product_mask, layerInfoArray["prompt"], reference_bg_image, layerInfoArray["correct_color"], 0, 0, 0,)
-    
-class LayerInfoArrayIPAdapterAdvanced:
+        fuse_image, fuse_product_image,reference_bg_image,layer_index_images = fuse_layer(layerInfoArray)
+        fuse_image, fuse_mask = pilimage_to_tensor(fuse_image, needMask=True)
+        
+        fuse_product_image, fuse_product_mask = pilimage_to_tensor(fuse_product_image, needMask=True)
+        reference_bg_image, _ = pilimage_to_tensor(reference_bg_image)
+        return (fuse_image, fuse_mask, fuse_product_image, fuse_product_mask,reference_bg_image, layer_index_images,  layerInfoArray["prompt"], layerInfoArray["correct_color"], 0, 0, 0,)
+
+#this class code from ComfyUI_IPAdapter_plus.IPAdapterPlus.IPAdapterAdvanced
+class LayerImagesIPAdapterAdvanced:
     @classmethod
     def INPUT_TYPES(s):
+        _WEIGHT_TYPES = []
+        try:
+            from custom_nodes.ComfyUI_IPAdapter_plus.IPAdapterPlus import WEIGHT_TYPES
+            _WEIGHT_TYPES.extend(WEIGHT_TYPES)
+        except:
+            pass
         return {
-            
+            "required": {
+                "layer_images": ("LAYER_IMAGES",),
+                "layer_filter_type":("STRING",{"default": "all"}),
+                "layer_need_fuse":("BOOLEAN", {"default": True,"lable_on":"yes","lable_off":"no"}),
+                "layer_canvas": ("IMAGE",),
+                "model": ("MODEL", ),
+                "ipadapter": ("IPADAPTER", ),
+                "weight": ("FLOAT", { "default": 1.0, "min": -1, "max": 5, "step": 0.05 }),
+                "weight_type": (_WEIGHT_TYPES, ),
+                "combine_embeds": (["concat", "add", "subtract", "average", "norm average"],),
+                "start_at": ("FLOAT", { "default": 0.0, "min": 0.0, "max": 1.0, "step": 0.001 }),
+                "end_at": ("FLOAT", { "default": 1.0, "min": 0.0, "max": 1.0, "step": 0.001 }),
+                "embeds_scaling": (['V only', 'K+V', 'K+V w/ C penalty', 'K+mean(V) w/ C penalty'], ),
+            },
+            "optional": {
+                "image_negative": ("IMAGE",),
+                "clip_vision": ("CLIP_VISION",),
+            }
         }
-    RETURN_TYPES = ("STRING",)
-    RETURN_NAMES = ("STRING",)
-    FUNCTION = "load_unet"
+    RETURN_TYPES = ("MODEL","LAYER_IMAGES","MASK")
+    RETURN_NAMES = ("MODEL","layerImages","extendedMASK")
+    FUNCTION = "apply_ipadapter"
 
-    CATEGORY = "x"
+    CATEGORY = "ipadapter"
 
-    def load_unet(self,):
-        return ("unet",)
+    def apply_ipadapter(self,layer_images,layer_filter_type,layer_need_fuse,layer_canvas, model, ipadapter, start_at=0.0, end_at=1.0, weight=1.0, weight_style=1.0, weight_composition=1.0, expand_style=False, weight_type="linear", combine_embeds="concat", weight_faceidv2=None, image_style=None, image_composition=None, image_negative=None, clip_vision=None, insightface=None, embeds_scaling='V only', layer_weights=None, ipadapter_params=None, encode_batch_size=0, style_boost=None):
+        layer_filter_data = []
+        remain = []
+        for layer in layer_images:
+            if layer_filter_type=="all" or layer["type"] == layer_filter_type:
+                layer_filter_data.append(layer)
+            else:
+                remain.append(layer)
+        if len(layer_filter_data) == 0:
+            extendedMASK = torch.zeros_like(layer_canvas)
+            extendedMASK = extendedMASK.to(layer_canvas.device,dtype=layer_canvas.dtype)
+            return (model,remain,extendedMASK,)
+        
+        need_process_images = []
+        if layer_need_fuse:
+            extendedMASK = None
+            fuse_img = None
+            for layer in layer_filter_data:
+                if fuse_img == None:
+                    fuse_img = layer["deformationImage"]
+                else:
+                    fuse_img = Image.alpha_composite(fuse_img, layer['deformationImage'])
+            if fuse_img is not None:
+                layer_img,layer_mask = pilimage_to_tensor(fuse_img, needMask=True)
+                need_process_images.append((layer_img,layer_mask))
+                extendedMASK = layer_mask
+        else:
+            fuse_img = None
+            for layer in layer_filter_data:
+                img_pil = layer["deformationImage"]
+                if fuse_img == None:
+                    fuse_img = img_pil
+                else:
+                    fuse_img = Image.alpha_composite(fuse_img, img_pil)
+                layer_img,_ = pilimage_to_tensor(layer["originalImage"])
+                _,layer_mask = pilimage_to_tensor(img_pil, needMask=True,justMask=True)
+                need_process_images.append((layer_img,layer_mask))
+            if fuse_img is not None:
+                _,extendedMASK = pilimage_to_tensor(fuse_img, needMask=True,justMask=True)
+        if extendedMASK is None:
+            extendedMASK = torch.zeros_like(layer_canvas)
+            extendedMASK = extendedMASK.to(layer_canvas.device,dtype=layer_canvas.dtype)
+        if len(need_process_images) == 0:
+            return (model,remain,extendedMASK,)        
+        try:
+            from custom_nodes.ComfyUI_IPAdapter_plus.IPAdapterPlus import IPAdapterAdvanced
+        except:
+            raise Exception("ComfyUI_IPAdapter_plus.IPAdapterPlus not found,you should install it first.")
+        ipadapter = IPAdapterAdvanced()
+        
+        for layer in need_process_images:
+            model ,_ = ipadapter.apply_ipadapter(model, ipadapter, start_at, end_at, weight, weight_style, weight_composition, expand_style, weight_type, combine_embeds, weight_faceidv2, layer_img, image_style, image_composition, image_negative, clip_vision, layer_mask, insightface, embeds_scaling, layer_weights, ipadapter_params, encode_batch_size, style_boost)
+        return (model,remain,extendedMASK,)
 
 
 NODE_CLASS_MAPPINGS = {
     "Init Layer Info Array":InitLayerInfoArray,
     "Added Layer Info To Array":AddedLayerInfoToArray,
-    # "Layer Info Array Filter":LayerInfoArrayFilter,
     "Layer Info Array Fuse":LayerInfoArrayFuse,
-    # "Layer Info Array IPAdapter Advanced":LayerInfoArrayIPAdapterAdvanced,
+    "Layer Images IPAdapter Advanced":LayerImagesIPAdapterAdvanced,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "Init Layer Info Array":"Init Layer Info Array",
     "Added Layer Info To Array": "Added Layer Info To Array",
-    # "Layer Info Array Filter": "Layer Info Array Filter",
     "Layer Info Array Fuse": "Layer Info Array Fuse",
-    # "Layer Info Array IPAdapter Advanced": "Layer Info Array IPAdapter Advanced",
+    "Layer Images IPAdapter Advanced": "Layer Images IPAdapter Advanced",
 
 }
