@@ -1,24 +1,26 @@
-from PIL import Image
+from PIL import Image, ImageOps, ImageSequence, ImageFile
 import os
 import numpy as np
 import torch
 import folder_paths
+import node_helpers
 
 
 def open_image_from_inputdir(filename):
     input_dir = folder_paths.get_input_directory()
     img_path = os.path.join(input_dir, filename)
-    img = Image.open(img_path)
+    img = node_helpers.pillow(Image.open, img_path)
+    img = node_helpers.pillow(ImageOps.exif_transpose, img)
     return img
     
 def _process_layer(layer):
-    img = open_image_from_inputdir(layer['image']).convert('RGBA')
+    img = open_image_from_inputdir(layer['image'])
     img = img.resize((layer['width'], layer['height']),Image.LANCZOS)
     img = img.rotate(layer['rotation'], expand=True)
     return img
 
-def _paste_image(img, position,canvas):
-    full_size_img = Image.new('RGBA', canvas.size, (0, 0, 0, 0))
+def _paste_image(img, position,size):
+    full_size_img = Image.new('RGBA',size, (0, 0, 0, 0))
     full_size_img.paste(img, position, img)
     return full_size_img
     
@@ -30,8 +32,9 @@ def fuse_layer(layerInfoArray):
     for layer in layerInfoArray['layers']:
         img = _process_layer(layer)
         position = (layer['position_x'], layer['position_y'])
-        full_size_img = _paste_image(img, position,canvas)
-        # 合并到主画布
+        
+        full_size_img = _paste_image(img, position,canvas.size)
+        
         canvas = Image.alpha_composite(canvas, full_size_img)
         if layer['type'] == 'Product':
             # 对于 type=Product 的图层，我们将其合并到 type_product_layers
@@ -49,16 +52,20 @@ def fuse_layer(layerInfoArray):
             type_product_layers = unmasked_type_product
     return (canvas, type_product_layers,)
     
-def pilimage_to_tensor(image):
+def pilimage_to_tensor(image,mask=False):
     if not isinstance(image, Image.Image):
         raise ValueError("`image` must be a PIL Image object.")
-    
     # 转换为RGB并转为numpy数组
-    image_array = np.array(image.convert("RGB"))
+    image_array = np.array(image.convert("RGB")).astype(np.float32) / 255.0
     
-    # 转换为torch tensor，归一化到[0, 1]范围
-    image_tensor = torch.from_numpy(image_array).float().div(255)
+    # 转换为torch tensor
+    image_tensor = torch.from_numpy(image_array).unsqueeze(0)
     
-    # 添加batch维度
-    image_tensor = image_tensor.unsqueeze(0)
-    return image_tensor
+    if mask:
+        mask = np.array(image.getchannel('A')).astype(np.float32) / 255.0
+        mask = torch.from_numpy(mask)
+        mask = 1. - mask
+        mask = mask.unsqueeze(0)
+        return image_tensor, mask
+    else:
+        return image_tensor

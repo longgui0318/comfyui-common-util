@@ -109,25 +109,26 @@ class LayerInfoArrayFuse:
                 "layerInfoArrayJson":("STRING",{"default": ""}),
             }
         }
-    RETURN_TYPES = ("IMAGE","IMAGE","STRING","IMAGE","BOOLEAN","INT","INT","INT")
-    RETURN_NAMES = ("fuseImage","fuseProductImage","prompt","referenceBg","correctColor","renderStrength","colorStrength","outlineStrength")
+    RETURN_TYPES = ("IMAGE","MASK","IMAGE","MASK","STRING","IMAGE","BOOLEAN","INT","INT","INT")
+    RETURN_NAMES = ("fuseImage","fuseMask","fuseProductImage","fuseProductMask","prompt","referenceBg","correctColor","renderStrength","colorStrength","outlineStrength")
     FUNCTION = "fuse_fc"
 
     CATEGORY = "utils"
 
-    def fuse_fc(self,layerInfoArrayJson,):
+    def fuse_fc(self, layerInfoArrayJson,):
         layerInfoArray = json.loads(layerInfoArrayJson)
-    
-        fuse_image,fuse_product_image = fuse_layer(layerInfoArray)
-        fuse_image = pilimage_to_tensor(fuse_image)
-        fuse_product_image = pilimage_to_tensor(fuse_product_image)
+
+        fuse_image, fuse_product_image = fuse_layer(layerInfoArray)
+        fuse_image, fuse_mask = pilimage_to_tensor(fuse_image, mask=True)
+        fuse_product_image, fuse_product_mask = pilimage_to_tensor(
+            fuse_product_image, mask=True)
         if layerInfoArray["reference_bg"] is not None and layerInfoArray["reference_bg"] != "":
-            reference_bg_image = open_image_from_inputdir(layerInfoArray["reference_bg"])
+            reference_bg_image = open_image_from_inputdir(
+                layerInfoArray["reference_bg"])
             reference_bg_image = pilimage_to_tensor(reference_bg_image)
         else:
-            reference_bg_image = None        
-        return (fuse_image,fuse_product_image,layerInfoArray["prompt"],reference_bg_image,layerInfoArray["correct_color"],0,0,0,)
-    
+            reference_bg_image = None
+        return (fuse_image,fuse_mask, fuse_product_image,fuse_product_mask, layerInfoArray["prompt"], reference_bg_image, layerInfoArray["correct_color"], 0, 0, 0,)
     
 class LayerInfoArrayIPAdapterAdvanced:
     @classmethod
