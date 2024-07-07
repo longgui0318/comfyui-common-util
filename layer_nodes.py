@@ -111,6 +111,53 @@ class LayerInfoArrayFuse:
         reference_bg_image, _ = pilimage_to_tensor(reference_bg_image)
         return (fuse_image, fuse_mask, fuse_product_image, fuse_product_mask,reference_bg_image, layer_index_images,  layerInfoArray["prompt"], layerInfoArray["correct_color"], 0, 0, 0,)
 
+
+#this class code from ComfyUI_IPAdapter_plus.IPAdapterPlus.IPAdapterAdvanced
+class LayerImageSeleted:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "layer_images": ("LAYER_IMAGES",),
+                "layer_filter_type":  (["all","Product", "Prop", "Human-Hand", "Human-Male", "Human-Female"],),
+                "layer_need_fuse":("BOOLEAN", {"default": True,"lable_on":"yes","lable_off":"no"}),
+                "layer_canvas": ("IMAGE",),
+            },
+        }
+    RETURN_TYPES = ("IMAGE","MASK",)
+    RETURN_NAMES = ("image","mask",)
+    FUNCTION = "select_fc"
+
+    CATEGORY = "utils"
+
+    def select_fc(self, layer_images, layer_filter_type, layer_need_fuse, layer_canvas):
+        layer_filter_data = []
+        for layer in layer_images:
+            if layer_filter_type == "all" or layer["type"] == layer_filter_type:
+                layer_filter_data.append(layer)
+        if len(layer_filter_data) == 0:
+            image, mask = pilimage_to_tensor(layer_canvas, needMask=True, justMask=False, empty=True)
+            image = image.to(layer_canvas.device, dtype=layer_canvas.dtype)
+            mask = mask.to(layer_canvas.device, dtype=layer_canvas.dtype)
+            return (image, mask,)
+
+        fuse_img = None
+        for layer in layer_filter_data:
+            if fuse_img == None:
+                fuse_img = layer["deformationImage"]
+            else:
+                fuse_img = Image.alpha_composite(fuse_img, layer['deformationImage'])
+        if fuse_img is not None:
+            layer_img, layer_mask = pilimage_to_tensor(fuse_img, needMask=True)
+            # 取反 0 1 互换
+            layer_mask = 1. - layer_mask
+            return (layer_img, layer_mask,)
+        else:
+            image, mask = pilimage_to_tensor(layer_canvas, needMask=True, justMask=False, empty=True)
+            image = image.to(layer_canvas.device, dtype=layer_canvas.dtype)
+            mask = mask.to(layer_canvas.device, dtype=layer_canvas.dtype)
+            return (image, mask,)
+
 #this class code from ComfyUI_IPAdapter_plus.IPAdapterPlus.IPAdapterAdvanced
 class LayerImagesIPAdapterAdvanced:
     @classmethod
@@ -124,7 +171,7 @@ class LayerImagesIPAdapterAdvanced:
         return {
             "required": {
                 "layer_images": ("LAYER_IMAGES",),
-                "layer_filter_type":("STRING",{"default": "all"}),
+                "layer_filter_type":  (["all","Product", "Prop", "Human-Hand", "Human-Male", "Human-Female"],),
                 "layer_need_fuse":("BOOLEAN", {"default": True,"lable_on":"yes","lable_off":"no"}),
                 "layer_canvas": ("IMAGE",),
                 "model": ("MODEL", ),
@@ -156,7 +203,7 @@ class LayerImagesIPAdapterAdvanced:
             else:
                 remain.append(layer)
         if len(layer_filter_data) == 0:
-            extended_mask = torch.zeros_like(layer_canvas)
+            _,extended_mask = pilimage_to_tensor(layer_canvas, needMask=True,justMask=True,empty=True)
             extended_mask = extended_mask.to(layer_canvas.device,dtype=layer_canvas.dtype)
             return (model,remain,extended_mask,)
         
@@ -191,7 +238,7 @@ class LayerImagesIPAdapterAdvanced:
                 _,extended_mask = pilimage_to_tensor(fuse_img, needMask=True,justMask=True)
                 extended_mask = 1. - extended_mask
         if extended_mask is None:
-            extended_mask = torch.zeros_like(layer_canvas)
+            _,extended_mask = pilimage_to_tensor(layer_canvas, needMask=True,justMask=True,empty=True)
             extended_mask = extended_mask.to(layer_canvas.device,dtype=layer_canvas.dtype)
         if len(need_process_images) == 0:
             return (model,remain,extended_mask,)        
@@ -210,6 +257,7 @@ NODE_CLASS_MAPPINGS = {
     "Init Layer Info Array":InitLayerInfoArray,
     "Added Layer Info To Array":AddedLayerInfoToArray,
     "Layer Info Array Fuse":LayerInfoArrayFuse,
+    "Layer Image Seleted":LayerImageSeleted,
     "Layer Images IPAdapter Advanced":LayerImagesIPAdapterAdvanced,
 }
 
@@ -217,6 +265,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "Init Layer Info Array":"Init Layer Info Array",
     "Added Layer Info To Array": "Added Layer Info To Array",
     "Layer Info Array Fuse": "Layer Info Array Fuse",
+    "Layer Image Seleted":"Layer Image Seleted",
     "Layer Images IPAdapter Advanced": "Layer Images IPAdapter Advanced",
 
 }

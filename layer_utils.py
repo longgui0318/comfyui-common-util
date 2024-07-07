@@ -66,7 +66,8 @@ def fuse_layer(layerInfoArray):
             'RGBA', (100, 100), (255, 255, 255, 255))
     return (canvas, product_image,reference_bg_image,layer_index_images)
     
-def pilimage_to_tensor(image,needMask=False,justMask=False):
+
+def pilimage_to_tensor(image, needMask=False, justMask=False, empty=False):
     if not isinstance(image, Image.Image):
         raise ValueError("`image` must be a PIL Image object.")
     if needMask:
@@ -75,14 +76,18 @@ def pilimage_to_tensor(image,needMask=False,justMask=False):
         mask = 1. - mask
         mask = mask.unsqueeze(0)
     else:
-        mask =None
+        mask = None
+    if empty and mask is not None:
+        mask = torch.zeros_like(mask)
     if justMask:
-        return None,mask
+        return None, mask
     # 转换为RGB并转为numpy数组
     image_array = np.array(image.convert("RGB")).astype(np.float32) / 255.0
-    
+
     # 转换为torch tensor
     image_tensor = torch.from_numpy(image_array).unsqueeze(0)
+    if empty:
+        image_tensor = torch.zeros_like(image_tensor)
     return image_tensor, mask
     
 def tensor_to_pilimage(tensor):
