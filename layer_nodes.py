@@ -111,21 +111,19 @@ class LayerInfoArrayFuse:
         reference_bg_image, _ = pilimage_to_tensor(reference_bg_image)
         return (fuse_image, fuse_mask, fuse_product_image, fuse_product_mask,reference_bg_image, layer_index_images,  layerInfoArray["prompt"], layerInfoArray["correct_color"], 0, 0, 0,)
 
-
-#this class code from ComfyUI_IPAdapter_plus.IPAdapterPlus.IPAdapterAdvanced
 class LayerImageSeleted:
     @classmethod
     def INPUT_TYPES(s):
         return {
             "required": {
                 "layer_images": ("LAYER_IMAGES",),
-                "layer_filter_type":  (["all","Product", "Prop", "Human-Hand", "Human-Male", "Human-Female"],),
-                "layer_need_fuse":("BOOLEAN", {"default": True,"lable_on":"yes","lable_off":"no"}),
+                "layer_filter_type":  (["all", "Product", "Prop", "Human-Hand", "Human-Male", "Human-Female"],),
+                "layer_need_fuse": ("BOOLEAN", {"default": True, "lable_on": "yes", "lable_off": "no"}),
                 "layer_canvas": ("IMAGE",),
             },
         }
-    RETURN_TYPES = ("IMAGE","MASK",)
-    RETURN_NAMES = ("image","mask",)
+    RETURN_TYPES = ("IMAGE", "MASK", "IMAGE",)
+    RETURN_NAMES = ("processedImage", "processedMask","originalImage",)
     FUNCTION = "select_fc"
 
     CATEGORY = "utils"
@@ -136,27 +134,33 @@ class LayerImageSeleted:
             if layer_filter_type == "all" or layer["type"] == layer_filter_type:
                 layer_filter_data.append(layer)
         if len(layer_filter_data) == 0:
-            image, mask = pilimage_to_tensor(layer_canvas, needMask=True, justMask=False, empty=True)
+            image, mask = pilimage_to_tensor(
+                layer_canvas, needMask=True, justMask=False, empty=True)
             image = image.to(layer_canvas.device, dtype=layer_canvas.dtype)
             mask = mask.to(layer_canvas.device, dtype=layer_canvas.dtype)
-            return (image, mask,)
+            return (image, mask, image,)
 
         fuse_img = None
+        org_img = None
         for layer in layer_filter_data:
             if fuse_img == None:
                 fuse_img = layer["deformationImage"]
+                org_img = layer["originalImage"]
             else:
                 fuse_img = Image.alpha_composite(fuse_img, layer['deformationImage'])
+                org_img = Image.alpha_composite(org_img, layer['originalImage'])
         if fuse_img is not None:
             layer_img, layer_mask = pilimage_to_tensor(fuse_img, needMask=True)
             # 取反 0 1 互换
             layer_mask = 1. - layer_mask
-            return (layer_img, layer_mask,)
+            layer_org_img,_ = pilimage_to_tensor(org_img)
+            return (layer_img, layer_mask,layer_org_img,)
         else:
-            image, mask = pilimage_to_tensor(layer_canvas, needMask=True, justMask=False, empty=True)
+            image, mask = pilimage_to_tensor(
+                layer_canvas, needMask=True, justMask=False, empty=True)
             image = image.to(layer_canvas.device, dtype=layer_canvas.dtype)
             mask = mask.to(layer_canvas.device, dtype=layer_canvas.dtype)
-            return (image, mask,)
+            return (image, mask, image,)
 
 #this class code from ComfyUI_IPAdapter_plus.IPAdapterPlus.IPAdapterAdvanced
 class LayerImagesIPAdapterAdvanced:
