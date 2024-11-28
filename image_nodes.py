@@ -1,4 +1,4 @@
-from .image_utils import _auto_analyze_parameters, hl_frequency_detail_restore, resize_image_with_padding,remove_alpha
+from .image_utils import _auto_analyze_parameters, hl_frequency_detail_restore, resize_image_with_padding,remove_alpha,add_alpha
 
 
 class ImageFrequencyAnalyzer:
@@ -90,12 +90,33 @@ class ImageRemoveAlpha:
 
     def remove_alpha(self, image, fill_color):
         return (remove_alpha(image, fill_color),)
+    
+class ImageAddAlpha:
+    def __init__(self):
+        pass
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "image": ("IMAGE",),
+                "mask": ("MASK",),
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE",)
+    FUNCTION = "add_alpha"
+    CATEGORY = "utils"
+
+    def add_alpha(self, image, mask):
+        return (add_alpha(image, mask),)
+
 
 NODE_CLASS_MAPPINGS = {
     # "Image Frequency Analyzer": ImageFrequencyAnalyzer,
     # "HLFrequencyDetailRestore": HLFrequencyDetailRestore,
     "Image Resize With Padding": ImageResizeWithPadding,
     "Image Remove Alpha": ImageRemoveAlpha,
+    "Image Add Alpha": ImageAddAlpha,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -103,4 +124,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     # "HLFrequencyDetailRestore": "HLFrequencyDetailRestore",
     "Image Resize With Padding": "Image Resize With Padding",
     "Image Remove Alpha": "Image Remove Alpha",
+    "Image Add Alpha": "Image Add Alpha",
 }

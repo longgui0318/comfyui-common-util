@@ -173,51 +173,92 @@ def hl_frequency_detail_restore(image, detail_image, mask=None, mask_blur=0):
 
 def resize_image_with_padding(image, width, height):
     original = tensor_to_numpy(image[0])
+    
+    # 计算缩放比例
     scale = min(width/original.shape[1], height/original.shape[0])
     new_size = (int(original.shape[1] * scale), int(original.shape[0] * scale))
-    resized_image = cv2.resize(original, new_size, interpolation=cv2.INTER_LANCZOS4)
     
-    # 判断是RGB还是RGBA
-    channels = original.shape[2]
-    pad_value = 0 if channels == 3 else [0, 0, 0, 0]  # RGB用黑色填充，RGBA用完全透明填充
+    # 使用 LANCZOS 进行高质量缩放
+    if original.shape[2] == 4:
+        # 分别处理 RGB 和 Alpha 通道
+        rgb = cv2.resize(original[:,:,:3], new_size, interpolation=cv2.INTER_LANCZOS4)
+        alpha = cv2.resize(original[:,:,3], new_size, interpolation=cv2.INTER_LANCZOS4)
+        resized_image = np.dstack((rgb, alpha[..., np.newaxis]))
+    else:
+        resized_image = cv2.resize(original, new_size, interpolation=cv2.INTER_LANCZOS4)
     
+    # 计算并应用填充
     if new_size[0] < width:
         offset = width - new_size[0]
         right_padding = offset // 2
         left_padding = offset - right_padding
-        resized_image = np.pad(resized_image, 
-                              ((0, 0), (left_padding, right_padding), (0, 0)), 
-                              mode='constant',
-                              constant_values=pad_value)
+        pad_width = ((0, 0), (left_padding, right_padding), (0, 0))
+        resized_image = np.pad(resized_image, pad_width, mode='constant')
     
     if new_size[1] < height:
         offset = height - new_size[1]
         bottom_padding = offset // 2
         top_padding = offset - bottom_padding
-        resized_image = np.pad(resized_image, 
-                              ((top_padding, bottom_padding), (0, 0), (0, 0)), 
-                              mode='constant',
-                              constant_values=pad_value)
+        pad_width = ((top_padding, bottom_padding), (0, 0), (0, 0))
+        resized_image = np.pad(resized_image, pad_width, mode='constant')
     
     return numpy_to_tensor(resized_image)
 
 def remove_alpha(image, fill_color):
-    original = tensor_to_numpy(image[0])
-    # 检查图片是否有alpha通道
-    if original.shape[2] == 4:
-        # 将16进制颜色转换为RGB
-        fill_color = fill_color.lstrip('#')
-        fill_rgb = tuple(int(fill_color[i:i+2], 16) for i in (0, 2, 4))
-        
-        # 获取alpha通道作为mask
-        alpha_mask = original[:,:,3] / 255.0
-        
-        # 创建填充颜色的背景
-        background = np.full_like(original[:,:,:3], fill_rgb)
-        
-        # 使用alpha混合原图和背景
-        original = original[:,:,:3] * alpha_mask[:,:,np.newaxis] + \
-                  background * (1 - alpha_mask[:,:,np.newaxis])
-    return numpy_to_tensor(original)
+    """
+    移除RGBA图像的alpha通道，并用指定颜色填充透明区域
+    image: torch.Tensor 格式的RGBA图像
+    fill_color: 16进制颜色字符串，例如 "#000000"
+    返回: 不带alpha通道的RGB torch.Tensor图像
+    """
+    # 转换为numpy数组
+    image_np = tensor_to_numpy(image[0])
     
+    # 确保输入图像是RGBA格式
+    if image_np.shape[2] != 4:
+        return image
     
+    # 将16进制颜色转换为RGB值
+    fill_color = fill_color.lstrip('#')
+    fill_r, fill_g, fill_b = tuple(int(fill_color[i:i+2], 16) for i in (0, 2, 4))
+    
+    # 分离alpha通道
+    rgb = image_np[:,:,:3]
+    alpha = image_np[:,:,3:4] / 255.0
+    
+    # 创建填充颜色数组
+    fill_color_array = np.array([fill_r, fill_g, fill_b], dtype=np.uint8)
+    
+    # 使用alpha混合进行颜色填充
+    result = rgb * alpha + fill_color_array * (1 - alpha)
+    
+    # 确保结果在0-255范围内
+    result = np.clip(result, 0, 255).astype(np.uint8)
+    
+    # 转换回tensor格式
+    return numpy_to_tensor(result)
+
+def add_alpha(image, mask):
+    """
+    将mask转换为alpha通道并添加到图像中
+    image: torch.Tensor 格式的RGB图像
+    mask: torch.Tensor 格式的mask
+    返回: 带有alpha通道的torch.Tensor图像
+    """
+    # 转换为numpy数组
+    image_np = tensor_to_numpy(image[0])
+    mask_np = tensor_to_numpy(mask[0])
+    
+    # 确保mask是2D的
+    if len(mask_np.shape) == 3:
+        mask_np = mask_np[:,:,0]
+    
+    # 创建RGBA图像
+    rgba = np.zeros((image_np.shape[0], image_np.shape[1], 4), dtype=np.uint8)
+    rgba[:,:,:3] = image_np
+    
+    # mask需要反转（因为LoadImage中是1 - mask）
+    rgba[:,:,3] = 255 - mask_np
+    
+    # 转换回tensor格式
+    return numpy_to_tensor(rgba)
