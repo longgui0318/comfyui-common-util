@@ -177,19 +177,48 @@ def resize_image_with_padding(image,width,height):
     scale = min(width/original.shape[1],height/original.shape[0])
     new_size = (int(original.shape[1] * scale), int(original.shape[0] * scale))
     resized_image = cv2.resize(original, new_size, interpolation=cv2.INTER_LANCZOS4)
-    # 判断宽高是否需要填充，如果需要进行左右填充
+    
+    # 判断是RGB还是RGBA
+    channels = original.shape[2]
+    pad_value = 0 if channels == 3 else (0,0,0,0)  # RGB用0填充，RGBA用(0,0,0,0)填充
+    
     if new_size[0] < width:
         offset = width - new_size[0]
         right_padding = offset // 2
         left_padding = offset - right_padding
-        resized_image = np.pad(resized_image, ((0, 0), (left_padding, right_padding), (0, 0)), mode='constant')
-        
+        resized_image = np.pad(resized_image, 
+                              ((0, 0), (left_padding, right_padding), (0, channels)), 
+                              mode='constant',
+                              constant_values=pad_value)
+    
     if new_size[1] < height:
         offset = height - new_size[1]
         bottom_padding = offset // 2
         top_padding = offset - bottom_padding
-        resized_image = np.pad(resized_image, ((top_padding, bottom_padding), (0, 0), (0, 0)), mode='constant')
+        resized_image = np.pad(resized_image, 
+                              ((top_padding, bottom_padding), (0, 0), (0, channels)), 
+                              mode='constant',
+                              constant_values=pad_value)
         
     return numpy_to_tensor(resized_image)
+
+def remove_alpha(image, fill_color):
+    original = tensor_to_numpy(image[0])
+    # 检查图片是否有alpha通道
+    if original.shape[2] == 4:
+        # 将16进制颜色转换为RGB
+        fill_color = fill_color.lstrip('#')
+        fill_rgb = tuple(int(fill_color[i:i+2], 16) for i in (0, 2, 4))
+        
+        # 获取alpha通道作为mask
+        alpha_mask = original[:,:,3] / 255.0
+        
+        # 创建填充颜色的背景
+        background = np.full_like(original[:,:,:3], fill_rgb)
+        
+        # 使用alpha混合原图和背景
+        original = original[:,:,:3] * alpha_mask[:,:,np.newaxis] + \
+                  background * (1 - alpha_mask[:,:,np.newaxis])
+    return numpy_to_tensor(original)
     
     
