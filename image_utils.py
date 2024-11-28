@@ -171,23 +171,22 @@ def hl_frequency_detail_restore(image, detail_image, mask=None, mask_blur=0):
     
     return numpy_to_tensor(result)
 
-def resize_image_with_padding(image,width,height):
+def resize_image_with_padding(image, width, height):
     original = tensor_to_numpy(image[0])
-    #等比缩放
-    scale = min(width/original.shape[1],height/original.shape[0])
+    scale = min(width/original.shape[1], height/original.shape[0])
     new_size = (int(original.shape[1] * scale), int(original.shape[0] * scale))
     resized_image = cv2.resize(original, new_size, interpolation=cv2.INTER_LANCZOS4)
     
     # 判断是RGB还是RGBA
     channels = original.shape[2]
-    pad_value = 0 if channels == 3 else (0,0,0,0)  # RGB用0填充，RGBA用(0,0,0,0)填充
+    pad_value = 0 if channels == 3 else [0, 0, 0, 0]  # RGB用黑色填充，RGBA用完全透明填充
     
     if new_size[0] < width:
         offset = width - new_size[0]
         right_padding = offset // 2
         left_padding = offset - right_padding
         resized_image = np.pad(resized_image, 
-                              ((0, 0), (left_padding, right_padding), (0, channels)), 
+                              ((0, 0), (left_padding, right_padding), (0, 0)), 
                               mode='constant',
                               constant_values=pad_value)
     
@@ -196,10 +195,10 @@ def resize_image_with_padding(image,width,height):
         bottom_padding = offset // 2
         top_padding = offset - bottom_padding
         resized_image = np.pad(resized_image, 
-                              ((top_padding, bottom_padding), (0, 0), (0, channels)), 
+                              ((top_padding, bottom_padding), (0, 0), (0, 0)), 
                               mode='constant',
                               constant_values=pad_value)
-        
+    
     return numpy_to_tensor(resized_image)
 
 def remove_alpha(image, fill_color):
